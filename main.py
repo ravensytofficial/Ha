@@ -375,7 +375,244 @@ async def on_app_command_error(
             )
         except:
             pass
+# ---------------- MODERATION ----------------
 
+@bot.tree.command(name="warn", description="Warn a member")
+@app_commands.checks.has_permissions(moderate_members=True)
+async def warn(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    reason: str = "No reason provided"
+):
+
+    embed = discord.Embed(
+        title="⚠️ Warning",
+        description=f"You were warned in **{interaction.guild.name}**",
+        color=discord.Color.orange()
+    )
+
+    embed.add_field(name="Reason", value=reason)
+
+    try:
+        await member.send(embed=embed)
+    except:
+        pass
+
+    await interaction.response.send_message(
+        f"⚠️ {member.mention} has been warned."
+    )
+
+# ---------------- LOCKDOWN ----------------
+
+@bot.tree.command(name="lock", description="Lock the channel")
+@app_commands.checks.has_permissions(manage_channels=True)
+async def lock(interaction: discord.Interaction):
+
+    overwrite = interaction.channel.overwrites_for(
+        interaction.guild.default_role
+    )
+
+    overwrite.send_messages = False
+
+    await interaction.channel.set_permissions(
+        interaction.guild.default_role,
+        overwrite=overwrite
+    )
+
+    await interaction.response.send_message(
+        "🔒 Channel locked."
+    )
+
+@bot.tree.command(name="unlock", description="Unlock the channel")
+@app_commands.checks.has_permissions(manage_channels=True)
+async def unlock(interaction: discord.Interaction):
+
+    overwrite = interaction.channel.overwrites_for(
+        interaction.guild.default_role
+    )
+
+    overwrite.send_messages = True
+
+    await interaction.channel.set_permissions(
+        interaction.guild.default_role,
+        overwrite=overwrite
+    )
+
+    await interaction.response.send_message(
+        "🔓 Channel unlocked."
+    )
+
+# ---------------- CLEAR ----------------
+
+@bot.tree.command(name="clear", description="Delete messages")
+@app_commands.checks.has_permissions(manage_messages=True)
+async def clear(
+    interaction: discord.Interaction,
+    amount: int
+):
+
+    await interaction.response.defer(ephemeral=True)
+
+    deleted = await interaction.channel.purge(limit=amount)
+
+    await interaction.followup.send(
+        f"🧹 Deleted {len(deleted)} messages.",
+        ephemeral=True
+    )
+
+# ---------------- MUTE ----------------
+
+@bot.tree.command(name="mute", description="Timeout a member")
+@app_commands.checks.has_permissions(moderate_members=True)
+async def mute(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    minutes: int,
+    reason: str = "No reason provided"
+):
+
+    from datetime import timedelta
+
+    await member.timeout(
+        timedelta(minutes=minutes),
+        reason=reason
+    )
+
+    await interaction.response.send_message(
+        f"🔇 {member.mention} muted for {minutes} minutes."
+    )
+
+# ---------------- UNMUTE ----------------
+
+@bot.tree.command(name="unmute", description="Remove timeout")
+@app_commands.checks.has_permissions(moderate_members=True)
+async def unmute(
+    interaction: discord.Interaction,
+    member: discord.Member
+):
+
+    await member.timeout(None)
+
+    await interaction.response.send_message(
+        f"🔊 {member.mention} unmuted."
+    )
+
+# ---------------- SETADMIN ----------------
+
+@bot.tree.command(name="setadmin", description="Give admin role")
+@app_commands.checks.has_permissions(administrator=True)
+async def setadmin(
+    interaction: discord.Interaction,
+    member: discord.Member
+):
+
+    role = discord.utils.get(
+        interaction.guild.roles,
+        permissions=discord.Permissions(administrator=True)
+    )
+
+    if role is None:
+        return await interaction.response.send_message(
+            "❌ No admin role found."
+        )
+
+    await member.add_roles(role)
+
+    await interaction.response.send_message(
+        f"👑 {member.mention} is now admin."
+    )
+
+# ---------------- SLOWMODE ----------------
+
+@bot.tree.command(name="slowmode", description="Set slowmode")
+@app_commands.checks.has_permissions(manage_channels=True)
+async def slowmode(
+    interaction: discord.Interaction,
+    seconds: int
+):
+
+    await interaction.channel.edit(
+        slowmode_delay=seconds
+    )
+
+    await interaction.response.send_message(
+        f"🐢 Slowmode set to {seconds}s."
+    )
+
+# ---------------- NICK ----------------
+
+@bot.tree.command(name="nick", description="Change nickname")
+@app_commands.checks.has_permissions(manage_nicknames=True)
+async def nick(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    nickname: str
+):
+
+    await member.edit(nick=nickname)
+
+    await interaction.response.send_message(
+        f"✏️ Changed nickname for {member.mention}"
+    )
+
+# ---------------- SAY ----------------
+
+@bot.tree.command(name="say", description="Make the bot say something")
+@app_commands.checks.has_permissions(manage_messages=True)
+async def say(
+    interaction: discord.Interaction,
+    message: str
+):
+
+    await interaction.response.send_message(
+        "✅ Sent.",
+        ephemeral=True
+    )
+
+    await interaction.channel.send(message)
+
+# ---------------- EMBED ----------------
+
+@bot.tree.command(name="embed", description="Create an embed")
+@app_commands.checks.has_permissions(manage_messages=True)
+async def embed(
+    interaction: discord.Interaction,
+    title: str,
+    description: str
+):
+
+    em = discord.Embed(
+        title=title,
+        description=description,
+        color=discord.Color.blurple()
+    )
+
+    await interaction.response.send_message(embed=em)
+
+# ---------------- SERVER ICON ----------------
+
+@bot.tree.command(name="servericon", description="Show server icon")
+async def servericon(interaction: discord.Interaction):
+
+    if interaction.guild.icon:
+
+        embed = discord.Embed(
+            title=f"{interaction.guild.name} Icon",
+            color=discord.Color.blurple()
+        )
+
+        embed.set_image(url=interaction.guild.icon.url)
+
+        await interaction.response.send_message(embed=embed)
+
+# ---------------- MEMBER COUNT ----------------
+
+@bot.tree.command(name="membercount", description="Show member count")
+async def membercount(interaction: discord.Interaction):
+
+    await interaction.response.send_message(
+        f"👥 Members: {interaction.guild.member_count}"
+    )
 # ---------------- RUN ---------------- #
 
 bot.run(os.getenv("TOKEN"))
