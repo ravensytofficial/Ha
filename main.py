@@ -1,14 +1,17 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from captcha.image import ImageCaptcha
 from discord.ui import View, Button
+from captcha.image import ImageCaptcha
+
 import os
 import random
 import string
 from datetime import timedelta
 
 # ---------------- BOT SETUP ---------------- #
+
+TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
 intents.members = True
@@ -22,10 +25,17 @@ bot = commands.Bot(
 warnings = {}
 captcha_codes = {}
 
+ALLOWED_ROLES = [
+    "Owner",
+    "Admin",
+    "Staff"
+]
+
 # ---------------- READY ---------------- #
 
 @bot.event
 async def on_ready():
+
     try:
         synced = await bot.tree.sync()
 
@@ -35,9 +45,10 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Sync Error: {e}")
 
-# ---------------- CAPTCHA SYSTEM ---------------- #
+# ---------------- CAPTCHA ---------------- #
 
 class VerifyView(View):
+
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -45,7 +56,7 @@ class VerifyView(View):
         label="Verify",
         style=discord.ButtonStyle.green
     )
-    async def verify(
+    async def verify_button(
         self,
         interaction: discord.Interaction,
         button: Button
@@ -58,7 +69,10 @@ class VerifyView(View):
             )
         )
 
-        captcha = ImageCaptcha(width=280, height=90)
+        captcha = ImageCaptcha(
+            width=280,
+            height=90
+        )
 
         image_path = f"{interaction.user.id}.png"
 
@@ -67,7 +81,7 @@ class VerifyView(View):
         captcha_codes[interaction.user.id] = code
 
         await interaction.response.send_message(
-            "Type the CAPTCHA code shown below.",
+            "Type the CAPTCHA below.",
             file=discord.File(image_path),
             ephemeral=True
         )
@@ -76,8 +90,12 @@ class VerifyView(View):
     name="setupverify",
     description="Setup verification system"
 )
-@app_commands.checks.has_permissions(administrator=True)
-async def setupverify(interaction: discord.Interaction):
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def setupverify(
+    interaction: discord.Interaction
+):
 
     embed = discord.Embed(
         title="🔒 Verification",
@@ -91,7 +109,7 @@ async def setupverify(interaction: discord.Interaction):
     )
 
     await interaction.response.send_message(
-        "✅ Verification system created.",
+        "✅ Verification setup complete.",
         ephemeral=True
     )
 
@@ -103,7 +121,11 @@ async def on_message(message):
 
     if message.author.id in captcha_codes:
 
-        if message.content.upper() == captcha_codes[message.author.id]:
+        if (
+            message.content.upper()
+            ==
+            captcha_codes[message.author.id]
+        ):
 
             role = discord.utils.get(
                 message.guild.roles,
@@ -120,6 +142,7 @@ async def on_message(message):
             )
 
         else:
+
             await message.channel.send(
                 "❌ Wrong CAPTCHA."
             )
@@ -128,7 +151,93 @@ async def on_message(message):
 
 # ---------------- FORUM TICKETS ---------------- #
 
+class CloseTicketView(View):
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Close Ticket",
+        style=discord.ButtonStyle.red
+    )
+    async def close_ticket(
+        self,
+        interaction: discord.Interaction,
+        button: Button
+    ):
+
+        allowed = False
+
+        for role in interaction.user.roles:
+
+            if role.name in ALLOWED_ROLES:
+                allowed = True
+                break
+
+        if not allowed:
+
+            return await interaction.response.send_message(
+                "❌ Staff only.",
+                ephemeral=True
+            )
+
+        messages = []
+
+        async for msg in interaction.channel.history(
+            limit=None,
+            oldest_first=True
+        ):
+
+            timestamp = msg.created_at.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            content = msg.content
+
+            if not content:
+                content = "[Embed/Attachment]"
+
+            messages.append(
+                f"[{timestamp}] {msg.author}: {content}"
+            )
+
+        transcript_text = "\n".join(messages)
+
+        transcript_file = (
+            f"{interaction.channel.name}.txt"
+        )
+
+        with open(
+            transcript_file,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            f.write(transcript_text)
+
+        transcript_channel = discord.utils.get(
+            interaction.guild.text_channels,
+            name="ticket-transcripts"
+        )
+
+        await interaction.response.send_message(
+            "🗑️ Closing ticket..."
+        )
+
+        if transcript_channel:
+
+            await transcript_channel.send(
+                content=(
+                    f"📁 Transcript from "
+                    f"{interaction.channel.name}"
+                ),
+                file=discord.File(transcript_file)
+            )
+
+        await interaction.channel.delete()
+
 class TicketView(View):
+
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -136,7 +245,7 @@ class TicketView(View):
         label="Create Ticket",
         style=discord.ButtonStyle.blurple
     )
-    async def ticket(
+    async def ticket_button(
         self,
         interaction: discord.Interaction,
         button: Button
@@ -148,34 +257,79 @@ class TicketView(View):
         )
 
         if forum is None:
+
             return await interaction.response.send_message(
-                "❌ Create a forum channel named 'tickets' first.",
+                "❌ Create a forum channel named 'tickets'",
                 ephemeral=True
             )
 
         embed = discord.Embed(
             title="🎫 Support Ticket",
-            description="Staff will help you soon.",
+            description="Explain your issue here.",
             color=discord.Color.green()
         )
 
         thread = await forum.create_thread(
             name=f"{interaction.user.name}-ticket",
-            content=f"{interaction.user.mention} created a ticket.",
+            content=(
+                f"{interaction.user.mention} "
+                f"created a ticket."
+            ),
             embed=embed
         )
 
+        await thread.thread.send(
+            embed=embed,
+            view=CloseTicketView()
+        )
+
         await interaction.response.send_message(
-            f"✅ Ticket created: {thread.thread.mention}",
+            (
+                f"✅ Ticket created: "
+                f"{thread.thread.mention}"
+            ),
             ephemeral=True
         )
+
+@bot.tree.command(
+    name="setuptickets",
+    description="Setup forum tickets"
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def setuptickets(
+    interaction: discord.Interaction
+):
+
+    embed = discord.Embed(
+        title="🎫 Support",
+        description=(
+            "Press the button below "
+            "to create a ticket."
+        ),
+        color=discord.Color.blurple()
+    )
+
+    await interaction.channel.send(
+        embed=embed,
+        view=TicketView()
+    )
+
+    await interaction.response.send_message(
+        "✅ Ticket system setup complete.",
+        ephemeral=True
+    )
+
 # ---------------- PING ---------------- #
 
 @bot.tree.command(
     name="ping",
     description="Check latency"
 )
-async def ping(interaction: discord.Interaction):
+async def ping(
+    interaction: discord.Interaction
+):
 
     latency = round(bot.latency * 1000)
 
@@ -208,6 +362,7 @@ async def purge(
 ):
 
     if amount < 1 or amount > 100:
+
         return await interaction.response.send_message(
             "❌ Amount must be 1-100.",
             ephemeral=True
@@ -298,6 +453,7 @@ async def unban(
         )
 
     except Exception:
+
         await interaction.response.send_message(
             "❌ Invalid user ID.",
             ephemeral=True
@@ -352,11 +508,16 @@ async def warn(
     if member.id not in warnings[guild_id]:
         warnings[guild_id][member.id] = []
 
-    warnings[guild_id][member.id].append(reason)
+    warnings[guild_id][member.id].append(
+        reason
+    )
 
     embed = discord.Embed(
         title="⚠️ Warning",
-        description=f"You were warned in {interaction.guild.name}",
+        description=(
+            f"You were warned in "
+            f"{interaction.guild.name}"
+        ),
         color=discord.Color.orange()
     )
 
@@ -393,6 +554,7 @@ async def warnings_cmd(
     ).get(member.id, [])
 
     if not user_warnings:
+
         return await interaction.response.send_message(
             "✅ No warnings."
         )
@@ -406,6 +568,7 @@ async def warnings_cmd(
         user_warnings,
         start=1
     ):
+
         embed.add_field(
             name=f"Warning {i}",
             value=reason,
@@ -425,10 +588,14 @@ async def warnings_cmd(
 @app_commands.checks.has_permissions(
     manage_channels=True
 )
-async def lock(interaction: discord.Interaction):
+async def lock(
+    interaction: discord.Interaction
+):
 
-    overwrite = interaction.channel.overwrites_for(
-        interaction.guild.default_role
+    overwrite = (
+        interaction.channel.overwrites_for(
+            interaction.guild.default_role
+        )
     )
 
     overwrite.send_messages = False
@@ -451,10 +618,14 @@ async def lock(interaction: discord.Interaction):
 @app_commands.checks.has_permissions(
     manage_channels=True
 )
-async def unlock(interaction: discord.Interaction):
+async def unlock(
+    interaction: discord.Interaction
+):
 
-    overwrite = interaction.channel.overwrites_for(
-        interaction.guild.default_role
+    overwrite = (
+        interaction.channel.overwrites_for(
+            interaction.guild.default_role
+        )
     )
 
     overwrite.send_messages = True
@@ -555,7 +726,10 @@ async def nick(
     )
 
     await interaction.response.send_message(
-        f"✏️ Nickname changed for {member.mention}"
+        (
+            f"✏️ Nickname changed for "
+            f"{member.mention}"
+        )
     )
 
 # ---------------- SAY ---------------- #
@@ -633,6 +807,7 @@ async def serverinfo(
     )
 
     if guild.icon:
+
         embed.set_thumbnail(
             url=guild.icon.url
         )
@@ -652,7 +827,10 @@ async def membercount(
 ):
 
     await interaction.response.send_message(
-        f"👥 Members: {interaction.guild.member_count}"
+        (
+            f"👥 Members: "
+            f"{interaction.guild.member_count}"
+        )
     )
 
 # ---------------- ERROR HANDLER ---------------- #
@@ -674,14 +852,17 @@ async def on_app_command_error(
         )
 
     else:
+
         try:
+
             await interaction.response.send_message(
                 f"❌ Error: {error}",
                 ephemeral=True
             )
+
         except Exception:
             pass
 
 # ---------------- RUN ---------------- #
 
-bot.run(os.getenv("TOKEN"))
+bot.run(TOKEN)
