@@ -126,7 +126,7 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# ---------------- TICKET SYSTEM ---------------- #
+# ---------------- FORUM TICKETS ---------------- #
 
 class TicketView(View):
     def __init__(self):
@@ -142,74 +142,33 @@ class TicketView(View):
         button: Button
     ):
 
-        category = discord.utils.get(
-            interaction.guild.categories,
-            name="Tickets"
+        forum = discord.utils.get(
+            interaction.guild.forums,
+            name="tickets"
         )
 
-        if category is None:
-            category = await interaction.guild.create_category(
-                "Tickets"
+        if forum is None:
+            return await interaction.response.send_message(
+                "❌ Create a forum channel named 'tickets' first.",
+                ephemeral=True
             )
-
-        overwrites = {
-            interaction.guild.default_role:
-                discord.PermissionOverwrite(
-                    view_channel=False
-                ),
-
-            interaction.user:
-                discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True
-                )
-        }
-
-        channel = await interaction.guild.create_text_channel(
-            name=f"ticket-{interaction.user.name}",
-            category=category,
-            overwrites=overwrites
-        )
 
         embed = discord.Embed(
             title="🎫 Support Ticket",
-            description="Staff will assist you soon.",
+            description="Staff will help you soon.",
             color=discord.Color.green()
         )
 
-        await channel.send(
-            content=interaction.user.mention,
+        thread = await forum.create_thread(
+            name=f"{interaction.user.name}-ticket",
+            content=f"{interaction.user.mention} created a ticket.",
             embed=embed
         )
 
         await interaction.response.send_message(
-            f"✅ Ticket created: {channel.mention}",
+            f"✅ Ticket created: {thread.thread.mention}",
             ephemeral=True
         )
-
-@bot.tree.command(
-    name="setuptickets",
-    description="Setup ticket system"
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def setuptickets(interaction: discord.Interaction):
-
-    embed = discord.Embed(
-        title="🎫 Support Tickets",
-        description="Press the button below to create a ticket.",
-        color=discord.Color.blurple()
-    )
-
-    await interaction.channel.send(
-        embed=embed,
-        view=TicketView()
-    )
-
-    await interaction.response.send_message(
-        "✅ Ticket system created.",
-        ephemeral=True
-    )
-
 # ---------------- PING ---------------- #
 
 @bot.tree.command(
